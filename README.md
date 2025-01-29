@@ -1,4 +1,4 @@
-# 🌟 Scientific Facts Bot - Quick Start Guide
+# 🌟 Scientific AI Facts Bot - Quick Start Guide
 
 ## 🚀 Installation & Setup
 
