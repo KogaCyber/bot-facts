@@ -31,6 +31,8 @@ INITIAL_BALANCE = 5.0
 
 STATS_FILE = 'bot_stats.json'
 
+PORT = int(os.environ.get('PORT', 8080))
+
 def load_stats():
     if os.path.exists(STATS_FILE):
         with open(STATS_FILE, 'r') as f:
@@ -278,7 +280,8 @@ if __name__ == "__main__":
         create_requirements()
     
     schedule_facts()
-    print("\nBot ishga tushdi. Faktlar Toshkent vaqti bilan 09:00, 13:00, 17:00 va 21:00 da yuboriladi")
+    print(f"\nBot ishga tushdi. Port: {PORT}")
+    print("Faktlar Toshkent vaqti bilan 09:00, 13:00, 17:00 va 21:00 da yuboriladi")
     print("Har bir vaqtda 4 ta noyob fakt yuboriladi")
     
     remaining_balance = INITIAL_BALANCE - stats['total_cost']
@@ -287,6 +290,9 @@ if __name__ == "__main__":
     
     current_time = get_tashkent_time().strftime("%H:%M")
     send_facts(f"Test ishga tushishi - {current_time}")
+    
+    # Start the bot
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
     
     while True:
         schedule.run_pending()
