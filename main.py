@@ -41,6 +41,7 @@ COST_PER_1K_TOKENS = 0.002
 INITIAL_BALANCE = 5.0
 
 STATS_FILE = 'bot_stats.json'
+FACTS_HISTORY_FILE = 'facts_history.json'
 
 PORT = int(os.environ.get('PORT', 8080))
 
@@ -89,6 +90,15 @@ def normalize_fact(fact):
     return normalized
 
 def get_ai_fact():
+    categories = [
+        "Physics", "Chemistry", "Biology", "Astronomy",
+        "Geography", "Technology", "Human Body", "Nature",
+        "Space", "Ocean", "Animals", "Plants", "Weather",
+        "Earth", "Science History", "Innovation"
+    ]
+    
+    selected_category = random.choice(categories)
+    
     try:
         response = client.messages.create(
             model="claude-3-5-sonnet-20241022",
@@ -96,45 +106,23 @@ def get_ai_fact():
             messages=[
                 {
                     "role": "user", 
-                    "content": """Generate one fascinating and 100% VERIFIED scientific fact in Uzbek with a clear explanation. Focus on well-documented scientific phenomena that can be easily visualized.
+                    "content": f"""Generate one fascinating and 100% VERIFIED scientific fact about {selected_category} in Uzbek with a clear explanation.
 
 IMPORTANT RULES:
 1. First line: scientific fact (max 50 characters)
 2. Second line: detailed explanation with "Chunki" (max 80 characters)
 3. Use simple but precise Uzbek words
 4. ONLY use facts that have clear scientific evidence
-5. Explanation MUST be detailed enough to fully understand the fact
-6. Each fact should be visually representable with a photo
-7. NO unverified or questionable facts
-8. NO oversimplified or misleading explanations
-9. Focus on facts that can be clearly explained
-10. Prefer facts about visible phenomena or structures
-11. Include specific details in the explanation
-12. If fact requires complex explanation - choose different fact
-
-GOOD EXAMPLES:
-- Fact: Kolibri yuragining urishi minutiga 1200 marta
-  Chunki juda tez harakat qilish uchun yuqori energiya talab qilinadi
-  [keywords: hummingbird, heart, speed]
-
-- Fact: Ayiq bir kunda 40 kg gacha asalni yeya oladi
-  Chunki uning oshqozoni katta hajmda oziq-ovqatni hazm qila oladi
-  [keywords: bear, honey, eating]
-
-BAD EXAMPLES:
-- Fact: Toshbaqalar orqali nafas oladi
-  Chunki ular qishda muzli suvda uxlaydi
-  (Wrong fact + poor explanation)
-
-- Fact: Hayvonlar ovqat yeydi
-  Chunki ularga energiya kerak
-  (Too obvious + too simple explanation)
+5. Each fact should be visually representable with a photo
+6. Focus on interesting and surprising facts
+7. Include specific numbers and details
+8. Make sure the fact is educational and memorable
 
 FORMAT:
 [Scientific fact]
 [Detailed explanation]
-
-[keywords: main_subject, action, detail, visual_element]"""
+[keywords: main_subject, action, detail, visual_element]
+[category: {selected_category}]"""
                 }
             ]
         )
@@ -232,37 +220,52 @@ def get_image(keywords):
 def get_tashkent_time():
     return datetime.now(TIMEZONE)
 
+def load_facts_history():
+    if os.path.exists(FACTS_HISTORY_FILE):
+        with open(FACTS_HISTORY_FILE, 'r') as f:
+            return json.load(f)
+    return []
+
+def save_facts_history(fact, category):
+    history = load_facts_history()
+    history.append({
+        'fact': fact,
+        'category': category,
+        'timestamp': datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
+    })
+    with open(FACTS_HISTORY_FILE, 'w') as f:
+        json.dump(history, f, indent=4, ensure_ascii=False)
+
 def send_facts(time_slot):
     try:
-        sent_facts = set()
         facts_to_send = []
         attempts = 0
         max_attempts = 20
+        history = load_facts_history()
+        used_facts = {fact['fact'] for fact in history}
         
-        while len(facts_to_send) < 4 and attempts < max_attempts:
+        while len(facts_to_send) < 8 and attempts < max_attempts:
             fact, keywords = get_ai_fact()
             normalized_fact = normalize_fact(fact)
             
-            is_duplicate = any(normalize_fact(existing_fact) == normalized_fact 
-                             for existing_fact, _ in facts_to_send)
-            
-            if not is_duplicate:
+            if normalized_fact not in used_facts:
                 facts_to_send.append((fact, keywords))
+                used_facts.add(normalized_fact)
             
             attempts += 1
-            if attempts >= max_attempts:
-                print("Достигнуто максимальное количество попыток при сборе уникальных фактов")
         
         for fact, keywords in facts_to_send:
             try:
                 image_url = get_image(keywords)
                 fact_parts = fact.split('\n')
+                
                 if len(fact_parts) == 2:
                     message = f"{fact_parts[0]}\n👉 {fact_parts[1]}\n\n@bilim_faktlar"
                 else:
                     message = f"{fact}\n\n@bilim_faktlar"
-                    
+                
                 bot.send_photo(CHANNEL_ID, image_url, caption=message)
+                save_facts_history(fact, keywords.split(',')[0])
                 time.sleep(3)
             except Exception as e:
                 print(f"Fakt yuborishda xatolik: {e}")
