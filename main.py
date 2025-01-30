@@ -9,6 +9,8 @@ from anthropic import Anthropic
 import random
 import pytz
 from dotenv import load_dotenv
+from telebot.handler_backends import State, StatesGroup
+from telebot.storage import StateMemoryStorage
 
 load_dotenv()
 
@@ -23,7 +25,16 @@ if not all([BOT_TOKEN, CHANNEL_ID, PEXELS_API_KEY, ANTHROPIC_API_KEY]):
     print("Error: Missing API keys. Please set all required API keys.")
     exit(1)
 
-bot = telebot.TeleBot(BOT_TOKEN)
+telebot.apihelper.RETRY_ON_ERROR = True
+telebot.apihelper.CONNECT_TIMEOUT = 30
+telebot.apihelper.proxy = None
+
+state_storage = StateMemoryStorage()
+bot = telebot.TeleBot(BOT_TOKEN, state_storage=state_storage)
+
+requests.packages.urllib3.disable_warnings()
+requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += ':HIGH:!DH:!aNULL'
+
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 COST_PER_1K_TOKENS = 0.002
@@ -168,6 +179,8 @@ Chunki ularda maxsus ko'z tuzilishi bor.""", "bee, vision, ultraviolet"
 
 def get_image(keywords):
     try:
+        session = requests.Session()
+        session.trust_env = False
         keywords_list = [word.strip().lower() for word in keywords.split(',')]
         main_subject = keywords_list[0] if keywords_list else ''
         action = keywords_list[1] if len(keywords_list) > 1 else ''
@@ -276,24 +289,31 @@ def create_requirements():
             f.write(f"{req}\n")
 
 if __name__ == "__main__":
-    if not os.path.exists('requirements.txt'):
-        create_requirements()
-    
-    schedule_facts()
-    print(f"\nBot ishga tushdi. Port: {PORT}")
-    print("Faktlar Toshkent vaqti bilan 09:00, 13:00, 17:00 va 21:00 da yuboriladi")
-    print("Har bir vaqtda 4 ta noyob fakt yuboriladi")
-    
-    remaining_balance = INITIAL_BALANCE - stats['total_cost']
-    print(f"\nJoriy balans: ${remaining_balance:.3f}")
-    print(f"Jami faktlar: {stats['facts_generated']}")
-    
-    current_time = get_tashkent_time().strftime("%H:%M")
-    send_facts(f"Test ishga tushishi - {current_time}")
-    
-    # Start the bot
-    bot.infinity_polling(timeout=10, long_polling_timeout=5)
-    
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+    try:
+        if not os.path.exists('requirements.txt'):
+            create_requirements()
+        
+        schedule_facts()
+        print("\nBot ishga tushdi!")
+        print("Faktlar Toshkent vaqti bilan 09:00, 13:00, 17:00 va 21:00 da yuboriladi")
+        print("Har bir vaqtda 4 ta noyob fakt yuboriladi")
+        
+        remaining_balance = INITIAL_BALANCE - stats['total_cost']
+        print(f"\nJoriy balans: ${remaining_balance:.3f}")
+        print(f"Jami faktlar: {stats['facts_generated']}")
+        
+        current_time = get_tashkent_time().strftime("%H:%M")
+        send_facts(f"Test ishga tushishi - {current_time}")
+        
+        while True:
+            try:
+                bot.infinity_polling(timeout=10, long_polling_timeout=5)
+            except Exception as e:
+                print(f"Bot polling error: {e}")
+                time.sleep(15)
+                continue
+            
+            schedule.run_pending()
+            time.sleep(60)
+    except Exception as e:
+        print(f"Main error: {e}")
