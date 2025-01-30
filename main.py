@@ -11,6 +11,7 @@ import pytz
 from dotenv import load_dotenv
 from telebot.handler_backends import State, StatesGroup
 from telebot.storage import StateMemoryStorage
+import urllib3
 
 load_dotenv()
 
@@ -32,8 +33,7 @@ telebot.apihelper.proxy = None
 state_storage = StateMemoryStorage()
 bot = telebot.TeleBot(BOT_TOKEN, state_storage=state_storage)
 
-requests.packages.urllib3.disable_warnings()
-requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += ':HIGH:!DH:!aNULL'
+urllib3.disable_warnings()
 
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
