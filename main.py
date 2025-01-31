@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 from telebot.handler_backends import State, StatesGroup
 from telebot.storage import StateMemoryStorage
 import urllib3
+import signal
+import sys
 
 load_dotenv()
 
@@ -274,10 +276,11 @@ def send_facts(time_slot):
         print(f"Xatolik: {e}")
 
 def schedule_facts():
-    schedule.every().day.at("04:00").do(send_facts, "09:00")
-    schedule.every().day.at("08:00").do(send_facts, "13:00")
-    schedule.every().day.at("12:00").do(send_facts, "17:00")
-    schedule.every().day.at("16:00").do(send_facts, "21:00")
+    # Ташкент UTC+5
+    schedule.every().day.at("04:00").do(send_facts, "09:00")  # 09:00 UZB time
+    schedule.every().day.at("08:00").do(send_facts, "13:00")  # 13:00 UZB time
+    schedule.every().day.at("12:00").do(send_facts, "17:00")  # 17:00 UZB time
+    schedule.every().day.at("16:00").do(send_facts, "21:00")  # 21:00 UZB time
 
 def create_requirements():
     requirements = [
@@ -291,15 +294,40 @@ def create_requirements():
         for req in requirements:
             f.write(f"{req}\n")
 
+def signal_handler(signum, frame):
+    print("\nReceived signal to terminate. Cleaning up...")
+    try:
+        bot.stop_polling()
+    except:
+        pass
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+def check_next_run():
+    next_run = None
+    for job in schedule.jobs:
+        job_next_run = job.next_run
+        if not next_run or job_next_run < next_run:
+            next_run = job_next_run
+    
+    if next_run:
+        tashkent_time = next_run.astimezone(TIMEZONE)
+        print(f"\nKeyingi fakt yuborish vaqti: {tashkent_time.strftime('%Y-%m-%d %H:%M')} (Toshkent vaqti)")
+    return next_run
+
 if __name__ == "__main__":
     try:
         if not os.path.exists('requirements.txt'):
             create_requirements()
         
         schedule_facts()
+        check_next_run()
+        
         print("\nBot ishga tushdi!")
         print("Faktlar Toshkent vaqti bilan 09:00, 13:00, 17:00 va 21:00 da yuboriladi")
-        print("Har bir vaqtda 4 ta noyob fakt yuboriladi")
+        print("Har bir vaqtda 8 ta noyob fakt yuboriladi")
         
         remaining_balance = INITIAL_BALANCE - stats['total_cost']
         print(f"\nJoriy balans: ${remaining_balance:.3f}")
